@@ -112,8 +112,7 @@
   const cvs=document.getElementById('game'), hud=document.getElementById('hud'), uiLevel=document.getElementById('uiLevel'), uiSpeed=document.getElementById('uiSpeed'), uiPassed=document.getElementById('uiPassed'), boostFill=document.getElementById('boostFill'), menu=document.getElementById('menu'), btnStart=document.getElementById('btnStart'), btnHow=document.getElementById('btnHow'), btnCreds=document.getElementById('btnCreds'), how=document.getElementById('how'), creds=document.getElementById('creds'), toast=document.getElementById('toast'), touch=document.getElementById('touch');
 
   const ctx=cvs.getContext('2d');
-  const back=document.createElement('canvas'); back.width=LOW_W; back.height=LOW_H;
-  const bctx=back.getContext('2d',{alpha:false}); bctx.imageSmoothingEnabled=false; ctx.imageSmoothingEnabled=false;
+  ctx.imageSmoothingEnabled=false;
 
   function fit(){
     const w = Math.max(1, Math.floor(window.innerWidth));
@@ -213,11 +212,18 @@
       if(dz<0.35&&dx<0.35){ c.alive=false; c.z+=0.8; state.speed*=0.6; state.passed=Math.max(0,state.passed-1); setMessage(choice(QUIPS_CRASH),1.0); sfxThud(); if(navigator.vibrate)navigator.vibrate([20,50,30]); }
     }
     if(state.passed>=lev.target){ state.levelIndex++; if(state.levelIndex>=LEVELS.length){ setMessage("DU BIST DIE ABGAS-LEGENDE 🏁",3.5); state.levelIndex=LEVELS.length-1; } else { setMessage("Level Up → "+LEVELS[state.levelIndex].name,2.2); state.passed=0; } }
-    bctx.fillStyle="#000"; bctx.fillRect(0,0,LOW_W,LOW_H); drawRoad(bctx,lev);
-    for(const c of state.cars){ const jitter=(Math.sin((state.t*10+c.z*3))*0.02); drawLowPolyCar(bctx,c.x+jitter,c.z,c.body,c.dark,false,true); }
-    drawLowPolyCar(bctx,state.x*ROAD_W*0.8,0.6,"#c9b27a","#6b5a37",true,false);
-    if(state.quipTimer>0){ state.quipTimer-=dt; const a=Math.min(1,state.quipTimer*4); bctx.globalAlpha=a; bctx.fillStyle="rgba(0,0,0,0.55)"; const x=LOW_W*0.5,y=LOW_H*0.18; bctx.fillRect(x-60,y-10,120,22); bctx.fillStyle="#fff"; bctx.textAlign="center"; bctx.font="8px monospace"; bctx.fillText(state.message,x,y+6); bctx.globalAlpha=1; }
-    ctx.clearRect(0,0,cvs.width,cvs.height); ctx.imageSmoothingEnabled=false; ctx.drawImage(back,0,0,cvs.width,cvs.height);
+
+    // --- Rendering directly to main canvas at low-res via transform
+    const sx = (cvs.width) / LOW_W;
+    const sy = (cvs.height) / LOW_H;
+    ctx.setTransform(sx,0,0,sy,0,0);
+    ctx.clearRect(0,0,LOW_W,LOW_H);
+
+    drawRoad(ctx,lev);
+    for(const c of state.cars){ const jitter=(Math.sin((state.t*10+c.z*3))*0.02); drawLowPolyCar(ctx,c.x+jitter,c.z,c.body,c.dark,false,true); }
+    drawLowPolyCar(ctx,state.x*ROAD_W*0.8,0.6,"#c9b27a","#6b5a37",true,false);
+
+    if(state.quipTimer>0){ state.quipTimer-=dt; const a=Math.min(1,state.quipTimer*4); ctx.globalAlpha=a; ctx.fillStyle="rgba(0,0,0,0.55)"; const x=LOW_W*0.5,y=LOW_H*0.18; ctx.fillRect(x-60,y-10,120,22); ctx.fillStyle="#fff"; ctx.textAlign="center"; ctx.font="8px monospace"; ctx.fillText(state.message,x,y+6); ctx.globalAlpha=1; }
   }
 
   function startGame(){

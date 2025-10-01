@@ -1,5 +1,5 @@
 // Minimaler Offline-Cache für GitHub Pages
-const CACHE = 'trans-am-75-v2';
+const CACHE = 'trans-am-75-v3';
 const ASSETS = [
   './',
   './index.html',
