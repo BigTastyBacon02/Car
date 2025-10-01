@@ -1,9 +1,9 @@
-// Minimaler Offline-Cache für GitHub Pages
-const CACHE = 'trans-am-75-v3';
+// Minimaler Offline-Cache für GitHub Pages (v4)
+const CACHE = 'trans-am-75-v4';
 const ASSETS = [
   './',
   './index.html',
-  './manifest.webmanifest',
+  './manifest.webmanifest?v=4',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];

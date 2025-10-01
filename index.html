@@ -6,7 +6,7 @@
 <title>Trans Am '75: Überhol die E-Karren!</title>
 
 <!-- PWA: Manifest + Farben -->
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="manifest.webmanifest?v=4">
 <meta name="theme-color" content="#0d0c10">
 
 <!-- iOS "Zum Home-Bildschirm" -->
@@ -52,6 +52,7 @@
       <div class="badge">Lvl <span id="uiLevel">1</span></div>
       <div class="badge">Speed <span id="uiSpeed">0</span></div>
       <div class="badge">Überholt <span id="uiPassed">0</span></div>
+      <div class="badge" id="dbgColor">BG: #000000</div>
     </div>
     <div class="right">
       <div class="badge">Boost</div>
@@ -109,7 +110,7 @@
   const QUIPS_CRASH=["Aua. Stoßstange sucht Anschluss.","Das war ‘Reibungsenergie’.","Bitte wenden. Auch innerlich.","Fahrwerk sagt: ‘Nein’."];
 
   // ====== DOM ======
-  const cvs=document.getElementById('game'), hud=document.getElementById('hud'), uiLevel=document.getElementById('uiLevel'), uiSpeed=document.getElementById('uiSpeed'), uiPassed=document.getElementById('uiPassed'), boostFill=document.getElementById('boostFill'), menu=document.getElementById('menu'), btnStart=document.getElementById('btnStart'), btnHow=document.getElementById('btnHow'), btnCreds=document.getElementById('btnCreds'), how=document.getElementById('how'), creds=document.getElementById('creds'), toast=document.getElementById('toast'), touch=document.getElementById('touch');
+  const cvs=document.getElementById('game'), hud=document.getElementById('hud'), uiLevel=document.getElementById('uiLevel'), uiSpeed=document.getElementById('uiSpeed'), uiPassed=document.getElementById('uiPassed'), boostFill=document.getElementById('boostFill'), menu=document.getElementById('menu'), btnStart=document.getElementById('btnStart'), btnHow=document.getElementById('btnHow'), btnCreds=document.getElementById('btnCreds'), how=document.getElementById('how'), creds=document.getElementById('creds'), toast=document.getElementById('toast'), touch=document.getElementById('touch'), dbgColor=document.getElementById('dbgColor');
 
   const ctx=cvs.getContext('2d');
   ctx.imageSmoothingEnabled=false;
@@ -136,7 +137,7 @@
       el.addEventListener('pointerdown',e=>{e.preventDefault();setTouch(act,true);});
       el.addEventListener('pointerup',e=>{e.preventDefault();setTouch(act,false);});
       el.addEventListener('pointercancel',()=>setTouch(act,false));
-      el.addEventListener('pointerleave',()=>setTouch(act,false));
+      el.addEventListener('pointerleave',()=>setTouch(act>false));
     });
   });
 
@@ -182,6 +183,12 @@
   }
 
   function drawRoad(g,lev){
+    // BG hard reset every frame
+    g.save();
+    g.setTransform(1,0,0,1,0,0);
+    g.fillStyle='#000'; g.fillRect(0,0,cvs.width,cvs.height);
+    g.restore();
+
     g.fillStyle=lev.bg; g.fillRect(0,0,LOW_W,LOW_H);
     g.fillStyle="#222"; for(let i=0;i<4;i++){ const hx=(i*60+(state.t*18)%60)-50; g.beginPath(); g.moveTo(hx,LOW_H*0.45); g.lineTo(hx+40,LOW_H*0.18); g.lineTo(hx+80,LOW_H*0.45); g.closePath(); g.fill(); }
     g.fillStyle="#2d2d2d"; g.beginPath(); g.moveTo(LOW_W*0.15,LOW_H*0.62); g.lineTo(LOW_W*0.85,LOW_H*0.62); g.lineTo(LOW_W*1.00,LOW_H); g.lineTo(LOW_W*0.00,LOW_H); g.closePath(); g.fill();
@@ -203,6 +210,8 @@
     if(state.boosting){ state.boost=clamp(state.boost-BOOST_DRAIN*dt,0,1); if(navigator.vibrate)navigator.vibrate(8); sfxBeep(800,0.05); }
     const speedTarget=(state.boosting?MAX_SPEED*BOOST_MULT:MAX_SPEED)*0.6+70; state.speed=clamp(state.speed+(speedTarget-state.speed)*dt*2.0,60,MAX_SPEED*BOOST_MULT);
     uiLevel.textContent=(state.levelIndex+1)+" – "+lev.name; uiSpeed.textContent=Math.round(state.speed); uiPassed.textContent=state.passed; boostFill.style.width=Math.round(state.boost*100)+"%";
+    dbgColor.textContent = 'BG: '+lev.bg;
+
     state.nextSpawnZ-=dt*(state.speed*0.05); if(state.nextSpawnZ<=0){ spawnCar(lev); state.nextSpawnZ=rand(lev.minGap*0.7,lev.minGap*1.3); }
     for(const c of state.cars){ c.z-=dt*(state.speed*0.04); }
     state.cars=state.cars.filter(c=>c.z>-1);
@@ -248,7 +257,7 @@
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+      navigator.serviceWorker.register('./sw.js?v=4').catch(()=>{});
     });
   }
 })();
