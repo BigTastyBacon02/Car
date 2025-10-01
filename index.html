@@ -1,0 +1,582 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Trans Am '75: Überhol die E-Karren!</title>
+<style>
+  :root {
+    --ui: #ffe000;
+    --bg: #0d0c10;
+    --fg: #e6e6e6;
+    --accent: #ff3268;
+    --ok: #38e27d;
+    --warn: #ffa500;
+  }
+  html, body {
+    background:#000; color:var(--fg); margin:0; padding:0; height:100%;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Arial, sans-serif;
+    touch-action: none; /* wir machen eigene Touch-Controls */
+  }
+  #wrap { position:relative; width:100%; height:100vh; overflow:hidden; }
+  canvas { width:100%; height:100%; image-rendering: pixelated; display:block; background:#000; }
+  /* UI Overlay */
+  .hud {
+    position:absolute; left:0; right:0; top:0; padding:8px 10px; pointer-events:none;
+    display:flex; align-items:flex-start; justify-content:space-between; gap:8px; font-weight:700;
+    text-shadow: 0 1px 0 #000, 0 0 6px #000;
+  }
+  .hud .left, .hud .right { display:flex; gap:10px; align-items:center; }
+  .badge { background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.15); padding:6px 8px; border-radius:6px; }
+  .boostbar {
+    width:140px; height:12px; border:1px solid rgba(255,255,255,.25); border-radius:999px; overflow:hidden; background:rgba(0,0,0,.4);
+  }
+  .boostbar > div { height:100%; background: linear-gradient(90deg, #fff, var(--accent)); width:0%; }
+  /* Touch controls */
+  .touch {
+    position:absolute; inset:0; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:0; pointer-events:auto;
+  }
+  .btn {
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color: transparent;
+    touch-action: none; color:#fff; font-weight:800; font-size:14px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .btn span { opacity:.35; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); padding:10px 14px; border-radius:10px; }
+  .btn:active span { opacity:.9; }
+  .btn-left { grid-area: 2 / 1 / 3 / 2; }
+  .btn-right{ grid-area: 2 / 2 / 3 / 3; }
+  .btn-boost{ position:absolute; right:10px; bottom:10px; }
+  /* Menu overlay */
+  .menu {
+    position:absolute; inset:0; background: radial-gradient(ellipse at 50% 30%, rgba(255,50,104,.15), rgba(0,0,0,.85) 55%), #000;
+    display:flex; align-items:center; justify-content:center; text-align:center; padding:24px; pointer-events:auto;
+  }
+  .panel {
+    max-width:680px; width:clamp(280px, 92vw, 680px);
+    border:2px solid #222; background:linear-gradient(#1a1a1a,#0f0f0f); border-radius:16px; padding:20px; box-shadow:0 20px 80px rgba(0,0,0,.65);
+  }
+  h1 { margin:0 0 6px 0; font-size:28px; letter-spacing:.5px; }
+  .tiny { opacity:.75; font-size:13px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center; margin-top:14px;}
+  button {
+    cursor:pointer; background:var(--ui); color:#000; font-weight:900; border:none; border-radius:12px; padding:12px 16px;
+  }
+  button.secondary { background:#232323; color:#eaeaea; border:1px solid #383838; }
+  .credits { margin-top:12px; font-size:12px; opacity:.75; }
+  a { color:var(--ui); text-decoration:none; }
+  /* Pause tip */
+  .toast {
+    position:absolute; left:50%; transform:translateX(-50%); bottom:12px; background:rgba(0,0,0,.55);
+    border:1px solid rgba(255,255,255,.12); padding:8px 12px; border-radius:999px; font-size:12px; pointer-events:none;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" aria-label="PS1 Racer Canvas"></canvas>
+
+  <div class="hud" id="hud" hidden>
+    <div class="left">
+      <div class="badge">Lvl <span id="uiLevel">1</span></div>
+      <div class="badge">Speed <span id="uiSpeed">0</span></div>
+      <div class="badge">Überholt <span id="uiPassed">0</span></div>
+    </div>
+    <div class="right">
+      <div class="badge">Boost</div>
+      <div class="boostbar" aria-label="Boost-Leiste"><div id="boostFill"></div></div>
+      <div class="badge" id="uiFPS" style="min-width:52px;text-align:right;">60</div>
+    </div>
+  </div>
+
+  <div class="touch" id="touch" hidden>
+    <div class="btn btn-left" data-act="left"><span>◀</span></div>
+    <div class="btn btn-right" data-act="right"><span>▶</span></div>
+    <div class="btn btn-boost" data-act="boost"><span>BOOST</span></div>
+  </div>
+
+  <div class="menu" id="menu">
+    <div class="panel">
+      <h1>Trans Am '75 -- E-Karren-Überholer</h1>
+      <p class="tiny">Low-Poly PS1-Vibes. Metallische Geräusche. Noch mehr Überholprestige.</p>
+      <div class="row">
+        <button id="btnStart">Start 🚗⚡</button>
+        <button class="secondary" id="btnHow">Steuerung</button>
+        <button class="secondary" id="btnCreds">Credits</button>
+      </div>
+      <div id="how" style="display:none; text-align:left; margin-top:12px; line-height:1.45;">
+        <b>Steuerung</b><br>
+        <ul>
+          <li><b>Links/Rechts:</b> ← → oder A/D (Touch: Buttons)</li>
+          <li><b>Boost:</b> Leertaste / B (Touch: BOOST). Lädt sich beim Fahren auf.</li>
+          <li><b>Pause:</b> P</li>
+        </ul>
+      </div>
+      <div id="creds" style="display:none; text-align:left; margin-top:12px; line-height:1.45;">
+        <b>Credits</b><br>
+        Code, Grafik, "Metal"-Audio: Du & ChatGPT. Keine externen Assets. Marken werden humorvoll angedeutet.<br>
+        <small>Tip: Leg diese Datei als <code>index.html</code> ins Repo & aktiviere GitHub Pages.</small>
+      </div>
+      <div class="credits">Pro-Tipp: Handy quer halten. Lautstärke an. Wenn's vibriert: Absicht 😉</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden>Pause – drücke P zum Fortsetzen</div>
+</div>
+
+<script>
+(() => {
+  // ====== Config ======
+  const LOW_W = 192, LOW_H = 108; // "PS1-ish" interne Auflösung
+  const SCALE_FOV = 72;           // pseudo-perspektivischer Skalierungsfaktor
+  const ROAD_W = 1.9;             // halbe Straßenbreite in "Welteinheiten"
+  const LANE_COUNT = 3;
+  const MAX_SPEED = 220;
+  const BOOST_MULT = 1.5;
+  const BOOST_CHARGE_RATE = 0.20;   // pro Sekunde
+  const BOOST_DRAIN = 0.60;         // pro Sekunde
+  const CAR_SIZE = { w: 0.25, h: 0.10, d: 0.45 };
+
+  const LEVELS = [
+    { name:"Kaltstart", traffic: 0.8, minGap: 7.0, bg:"#162126", fog:"#0a0a0a", accent:"#ff3268", target: 20 },
+    { name:"Ladesäulen-Safari", traffic: 1.2, minGap: 6.2, bg:"#21161e", fog:"#090707", accent:"#ffe000", target: 35 },
+    { name:"E-Koalition", traffic: 1.6, minGap: 5.5, bg:"#121621", fog:"#06080a", accent:"#38e27d", target: 50 },
+    { name:"Öko-Apokalypse", traffic: 2.1, minGap: 5.0, bg:"#101010", fog:"#050505", accent:"#ff6a00", target: 70 },
+  ];
+
+  const QUIPS_PASS = [
+    "CO2? Mehr so C-O-Tschüss!",
+    "Grüße an die Reichweitenangst!",
+    "Schneller als Software-Update 37.4.2!",
+    "Ich fahr' mit Emotionen, nicht mit Emissionen.",
+    "Overtake: sponsored by V8-Kaffee.",
+    "Lädt ihr noch oder fahrt ihr schon?",
+    "Tank: leer. Humor: voll.",
+  ];
+  const QUIPS_CRASH = [
+    "Aua. Stoßstange sucht Anschluss.",
+    "Das war 'Reibungsenergie'.",
+    "Bitte wenden. Auch innerlich.",
+    "Fahrwerk sagt: 'Nein'."
+  ];
+
+  // ====== DOM ======
+  const cvs = document.getElementById('game');
+  const hud = document.getElementById('hud');
+  const uiLevel = document.getElementById('uiLevel');
+  const uiSpeed = document.getElementById('uiSpeed');
+  const uiPassed = document.getElementById('uiPassed');
+  const boostFill = document.getElementById('boostFill');
+  const menu = document.getElementById('menu');
+  const btnStart = document.getElementById('btnStart');
+  const btnHow = document.getElementById('btnHow');
+  const btnCreds = document.getElementById('btnCreds');
+  const how = document.getElementById('how');
+  const creds = document.getElementById('creds');
+  const toast = document.getElementById('toast');
+  const touch = document.getElementById('touch');
+
+  // Pixelated rendering via low-res backbuffer
+  const ctx = cvs.getContext('2d');
+  const back = document.createElement('canvas');
+  back.width = LOW_W; back.height = LOW_H;
+  const bctx = back.getContext('2d', { alpha:false });
+  bctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = false;
+
+  // Resize canvas to viewport each frame
+  function fit() {
+    cvs.width = cvs.clientWidth * devicePixelRatio;
+    cvs.height = cvs.clientHeight * devicePixelRatio;
+  }
+  window.addEventListener('resize', fit, { passive:true });
+  fit();
+
+  // ====== Input ======
+  const input = { left:false, right:false, boost:false, pause:false };
+  function kb(e, down) {
+    const k = e.key.toLowerCase();
+    if (k==='arrowleft' || k==='a') input.left = down;
+    if (k==='arrowright'|| k==='d') input.right = down;
+    if (k===' ' || k==='b') input.boost = down;
+    if (k==='p' && down) togglePause();
+  }
+  window.addEventListener('keydown', e => { kb(e,true); });
+  window.addEventListener('keyup',   e => { kb(e,false); });
+
+  // Touch controls
+  function setTouch(act, down) {
+    if (act==='left') input.left = down;
+    if (act==='right') input.right = down;
+    if (act==='boost') input.boost = down;
+  }
+  ['left','right','boost'].forEach(act=>{
+    [...document.querySelectorAll(`[data-act="${act}"]`)].forEach(el=>{
+      el.addEventListener('pointerdown', e => { e.preventDefault(); setTouch(act,true); });
+      el.addEventListener('pointerup',   e => { e.preventDefault(); setTouch(act,false); });
+      el.addEventListener('pointercancel', e => { setTouch(act,false); });
+      el.addEventListener('pointerleave',  e => { setTouch(act,false); });
+    });
+  });
+
+  // ====== Minimal "Metal" Audio (WebAudio Synth) ======
+  let AC, musicGain, sfxGain;
+  function initAudio() {
+    if (AC) return;
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    const master = AC.createGain(); master.gain.value = 0.9; master.connect(AC.destination);
+
+    musicGain = AC.createGain(); musicGain.gain.value = 0.22; musicGain.connect(master);
+    sfxGain = AC.createGain();   sfxGain.gain.value = 0.35;   sfxGain.connect(master);
+    // Simple distortion curve
+    const dist = AC.createWaveShaper();
+    dist.curve = new Float32Array(256).map((_,i)=> {
+      const x = i/128-1; return Math.tanh(5*x);
+    });
+    dist.connect(musicGain);
+
+    // Riff: two detuned squares + simple "kick" click
+    function makeSquare(freq, det=0) {
+      const o = AC.createOscillator(); o.type='square'; o.frequency.value = freq;
+      const g = AC.createGain(); g.gain.value = 0.12;
+      const d = AC.createDelay(); d.delayTime.value = 0.002 + Math.random()*0.002; // wobbly PS1-ish
+      o.connect(g).connect(d).connect(dist);
+      return {o,g};
+    }
+    const base = 110; // A2
+    const s1 = makeSquare(base);
+    const s2 = makeSquare(base*2, +7); s2.o.detune.value = +7;
+    const s3 = makeSquare(base*1.5, -9); s3.o.detune.value = -9;
+
+    [s1.o, s2.o, s3.o].forEach(o=>o.start());
+
+    // Pulse the gains in a metal-ish chug pattern
+    let t = AC.currentTime;
+    function riffLoop(){
+      const step = 0.18;
+      for (let i=0;i<16;i++){
+        const tt = t + i*step;
+        const on = (i%4===0||i%4===1)? 0.9 : 0.4;
+        [s1.g, s2.g, s3.g].forEach(g=>{
+          g.gain.cancelScheduledValues(tt);
+          g.gain.setValueAtTime(0.001, tt);
+          g.gain.linearRampToValueAtTime(on*0.14, tt+0.02);
+          g.gain.exponentialRampToValueAtTime(0.001, tt+step*0.9);
+        });
+        // kick-ish
+        const k = AC.createOscillator(); k.type='sine'; k.frequency.setValueAtTime(160, tt);
+        const kg= AC.createGain(); kg.gain.value=0.6;
+        k.connect(kg).connect(sfxGain);
+        k.start(tt);
+        k.frequency.exponentialRampToValueAtTime(40, tt+0.12);
+        kg.gain.exponentialRampToValueAtTime(0.0001, tt+0.14);
+        k.stop(tt+0.2);
+      }
+      t += step*16;
+      setTimeout(riffLoop, step*16*800); // approximate reschedule
+    }
+    riffLoop();
+  }
+  function sfxBeep(freq=600, time=0.08){
+    if(!AC) return;
+    const o = AC.createOscillator(); o.type='triangle'; o.frequency.value=freq;
+    const g = AC.createGain(); g.gain.value=0.001;
+    o.connect(g).connect(sfxGain);
+    const t = AC.currentTime;
+    g.gain.setValueAtTime(0.35, t);
+    g.gain.exponentialRampToValueAtTime(0.00001, t+time);
+    o.start(t); o.stop(t+time+0.02);
+  }
+  function sfxThud(){
+    if(!AC) return;
+    const o = AC.createOscillator(); o.type='square'; o.frequency.value=90;
+    const g = AC.createGain(); g.gain.value=0.5;
+    o.connect(g).connect(sfxGain);
+    const t = AC.currentTime;
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.25);
+    o.frequency.exponentialRampToValueAtTime(50, t+0.25);
+    o.start(t); o.stop(t+0.26);
+  }
+
+  // ====== Game State ======
+  const state = {
+    running:false, paused:false,
+    levelIndex:0, speed:80, passed:0,
+    t:0, z:0, lane:1, x:0,
+    boost:0.0, boosting:false,
+    cars:[], nextSpawnZ: 12,
+    quipTimer:0, message:"",
+  };
+
+  // ====== Helpers ======
+  function rand(a,b){ return a + Math.random()*(b-a); }
+  function choice(arr){ return arr[(Math.random()*arr.length)|0]; }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+
+  function showMenu(show=true){
+    menu.hidden = !show;
+    hud.hidden = show;
+    touch.hidden = show ? true : false;
+  }
+  function togglePause(){
+    if(!state.running) return;
+    state.paused = !state.paused;
+    toast.hidden = !state.paused;
+  }
+  function setMessage(msg, sec=1.6){
+    state.message = msg; state.quipTimer = sec;
+  }
+
+  // ====== World / Rendering ======
+  function laneToX(l){ // -1..1
+    const s = (l - (LANE_COUNT-1)/2) / ((LANE_COUNT-1)/2);
+    return s * ROAD_W * 0.8;
+  }
+
+  function drawLowPolyCar(g, x, z, colBody='#b9a36e', colDark='#6d5c35', isPlayer=false, isEV=false){
+    // Simple prisms/pyramids in pseudo-perspective
+    const scale = SCALE_FOV / (z+0.0001);
+    const cx = (LOW_W/2) + x*scale*LOW_W*0.25;
+    const cy = LOW_H*0.62 - z*scale*8;
+
+    const w = CAR_SIZE.w*scale*LOW_W;
+    const h = CAR_SIZE.h*scale*LOW_H;
+    const d = CAR_SIZE.d*scale*LOW_H;
+
+    // shadow
+    g.fillStyle = "rgba(0,0,0,0.25)";
+    g.fillRect(cx-w*0.6, cy+d*0.6, w*1.2, h*0.35);
+
+    // body
+    g.fillStyle = colBody;
+    g.fillRect(cx-w, cy, w*2, h);
+    // roof
+    g.fillStyle = colDark;
+    g.fillRect(cx-w*0.7, cy-h*0.2, w*1.4, h*0.5);
+    // hood / trunk triangular facets
+    g.fillStyle = isEV? "#6de1ff" : "#ffcd66";
+    g.beginPath(); g.moveTo(cx-w, cy); g.lineTo(cx, cy-h*0.25); g.lineTo(cx+w, cy); g.closePath(); g.fill();
+    g.fillStyle = isEV? "#4ab7d5" : "#d1a84a";
+    g.beginPath(); g.moveTo(cx-w, cy+h); g.lineTo(cx, cy+h+h*0.3); g.lineTo(cx+w, cy+h); g.closePath(); g.fill();
+
+    // silly "screws" for PS1 vibe
+    g.fillStyle = "rgba(0,0,0,0.35)";
+    g.fillRect(cx-w*0.8, cy+h*0.1, 1,1);
+    g.fillRect(cx+w*0.8-1, cy+h*0.1, 1,1);
+
+    if (isPlayer){
+      // fake "Firebird" vibes via gold stripe
+      g.fillStyle = "#ffd35a";
+      g.fillRect(cx-w*0.2, cy+h*0.2, w*0.4, h*0.12);
+    }
+  }
+
+  function drawRoad(g, lev){
+    // horizon & sky
+    g.fillStyle = lev.bg; g.fillRect(0,0,LOW_W,LOW_H);
+
+    // mountains (flat tri)
+    g.fillStyle = "#222"; 
+    for (let i=0;i<4;i++){
+      const hx = (i*60 + (state.t*18)%60) - 50;
+      g.beginPath();
+      g.moveTo(hx, LOW_H*0.45);
+      g.lineTo(hx+40, LOW_H*0.18);
+      g.lineTo(hx+80, LOW_H*0.45);
+      g.closePath(); g.fill();
+    }
+
+    // road polygon
+    g.fillStyle = "#2d2d2d";
+    g.beginPath();
+    g.moveTo(LOW_W*0.15, LOW_H*0.62);
+    g.lineTo(LOW_W*0.85, LOW_H*0.62);
+    g.lineTo(LOW_W*1.00, LOW_H);
+    g.lineTo(LOW_W*0.00, LOW_H);
+    g.closePath(); g.fill();
+
+    // lane stripes
+    g.fillStyle = "#cfcfcf";
+    for (let i=0;i<12;i++){
+      const z = i*1.0 + (state.t*state.speed*0.02)%1;
+      const scale = SCALE_FOV / (z+0.001);
+      const w = 1.5 + 16*scale;
+      const y = LOW_H*0.62 + (z*scale*30);
+      const x1 = LOW_W*0.33 - w*0.5, x2 = LOW_W*0.66 - w*0.5;
+      g.fillRect(x1, y, w, 2);
+      g.fillRect(x2, y, w, 2);
+    }
+
+    // fog
+    const grd = g.createLinearGradient(0, LOW_H*0.55, 0, LOW_H);
+    grd.addColorStop(0, 'rgba(0,0,0,0)');
+    grd.addColorStop(1, lev.fog);
+    g.fillStyle = grd; g.fillRect(0, LOW_H*0.55, LOW_W, LOW_H*0.45);
+  }
+
+  // ====== Spawning traffic ======
+  function spawnCar(lev){
+    const lane = (Math.random()*LANE_COUNT)|0;
+    const x = laneToX(lane);
+    const z = rand(8, 12);
+    const v = rand(40, 90) * lev.traffic;
+    const hue = (Math.random()*360)|0;
+    const body = `hsl(${hue} 60% 60%)`, dark = `hsl(${hue} 50% 35%)`;
+    state.cars.push({ lane, x, z, v, body, dark, ev:true, alive:true });
+  }
+
+  // ====== Game Loop ======
+  let last = performance.now();
+  let fpsSmoothed = 60;
+  function loop(now){
+    requestAnimationFrame(loop);
+    if (!state.running || state.paused) return;
+
+    const dt = Math.min(0.05, (now - last)/1000); last = now;
+    fpsSmoothed = fpsSmoothed*0.9 + (1/dt)*0.1;
+    document.getElementById('uiFPS').textContent = Math.round(fpsSmoothed);
+
+    const lev = LEVELS[state.levelIndex];
+
+    // logic
+    state.t += dt;
+    const steer = (input.right?1:0) - (input.left?1:0);
+    state.x = clamp(state.x + steer*dt*1.6, -1, 1);
+
+    // Boost handling
+    state.boost = clamp(state.boost + BOOST_CHARGE_RATE*dt, 0, 1);
+    const wantBoost = input.boost && state.boost > 0.05;
+    state.boosting = wantBoost;
+    if (state.boosting){
+      state.boost = clamp(state.boost - BOOST_DRAIN*dt, 0, 1);
+      if (navigator.vibrate) navigator.vibrate(8);
+      sfxBeep(800, 0.05);
+    }
+
+    const speedTarget = (state.boosting? MAX_SPEED*BOOST_MULT : MAX_SPEED) * 0.6 + 70;
+    state.speed = clamp(state.speed + (speedTarget - state.speed)*dt*2.0, 60, MAX_SPEED*BOOST_MULT);
+
+    uiLevel.textContent = (state.levelIndex+1) + " – " + lev.name;
+    uiSpeed.textContent = Math.round(state.speed);
+    uiPassed.textContent = state.passed;
+    boostFill.style.width = Math.round(state.boost*100) + "%";
+
+    // spawn traffic
+    state.nextSpawnZ -= dt * (state.speed*0.05);
+    if (state.nextSpawnZ <= 0){
+      spawnCar(lev);
+      state.nextSpawnZ = rand(lev.minGap*0.7, lev.minGap*1.3);
+    }
+
+    // move cars & collisions
+    for (const c of state.cars){
+      c.z -= dt * (state.speed*0.04);
+    }
+    // remove far cars
+    state.cars = state.cars.filter(c => c.z > -1);
+
+    // check pass / collision
+    for (const c of state.cars){
+      // "passing": player z ~ 0.6, car crosses z < 0.6
+      if (c.alive && c.z < 0.6 && !c.passed){
+        c.passed = true; state.passed++;
+        setMessage(choice(QUIPS_PASS), 1.3);
+        sfxBeep(1000, 0.06);
+      }
+      // rough collision box when close
+      const dz = Math.abs(c.z - 0.6);
+      const dx = Math.abs((state.x*ROAD_W*0.8) - c.x);
+      if (dz < 0.35 && dx < 0.35){
+        // crash -> knock back, lose progress a bit
+        c.alive=false; c.z += 0.8; // push away
+        state.speed *= 0.6;
+        state.passed = Math.max(0, state.passed - 1);
+        setMessage(choice(QUIPS_CRASH), 1.0);
+        sfxThud();
+        if (navigator.vibrate) navigator.vibrate([20,50,30]);
+      }
+    }
+
+    // Level complete?
+    if (state.passed >= lev.target){
+      state.levelIndex++;
+      if (state.levelIndex >= LEVELS.length){
+        setMessage("DU BIST DIE ABGAS-LEGENDE 🏁", 3.5);
+        state.levelIndex = LEVELS.length-1; // stay on last
+      } else {
+        setMessage("Level Up → " + LEVELS[state.levelIndex].name, 2.2);
+        state.passed = 0;
+      }
+    }
+
+    // render to backbuffer
+    bctx.fillStyle = "#000"; bctx.fillRect(0,0,LOW_W,LOW_H);
+    drawRoad(bctx, lev);
+
+    // draw traffic
+    for (const c of state.cars){
+      const jitter = (Math.sin((state.t*10 + c.z*3)) * 0.02);
+      drawLowPolyCar(bctx, c.x + jitter, c.z, c.body, c.dark, false, true);
+    }
+
+    // draw player '75 Trans Am-ish
+    drawLowPolyCar(bctx, state.x*ROAD_W*0.8, 0.6, "#c9b27a", "#6b5a37", true, false);
+
+    // UI message bubble
+    if (state.quipTimer > 0){
+      state.quipTimer -= dt;
+      const a = Math.min(1, state.quipTimer*4);
+      const w = bctx.measureText(state.message).width;
+      bctx.globalAlpha = a;
+      bctx.fillStyle = "rgba(0,0,0,0.55)";
+      const x = LOW_W*0.5, y = LOW_H*0.18;
+      bctx.fillRect(x-60, y-10, 120, 22);
+      bctx.fillStyle = "#fff";
+      bctx.textAlign = "center"; bctx.font = "8px monospace";
+      bctx.fillText(state.message, x, y+6);
+      bctx.globalAlpha = 1;
+    }
+
+    // blit to screen, nearest neighbor
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(back, 0,0, cvs.width, cvs.height);
+  }
+
+  // ====== Start / Menu ======
+  btnStart.addEventListener('click', () => {
+    startGame();
+  });
+  btnHow.addEventListener('click', () => {
+    how.style.display = how.style.display ? "" : "block";
+  });
+  btnCreds.addEventListener('click', () => {
+    creds.style.display = creds.style.display ? "" : "block";
+  });
+
+  function startGame(){
+    showMenu(false);
+    if (!AC) initAudio(); // start audio on user gesture
+    state.running = true; state.paused = false;
+    state.levelIndex = 0; state.speed = 80; state.passed = 0; state.boost = 0.3;
+    state.cars.length = 0; state.nextSpawnZ = 6;
+    last = performance.now();
+    requestAnimationFrame(loop);
+    // mobile hint
+    if (/Mobi|Android/i.test(navigator.userAgent)) {
+      touch.hidden = false;
+    }
+  }
+
+  // Kick off animation loop (render stops if not running)
+  requestAnimationFrame(loop);
+
+  // Accessibility: start audio on first interaction anywhere
+  window.addEventListener('pointerdown', ()=>{ try{ initAudio(); }catch{} }, { once:true });
+
+  // Prevent scroll bounce on mobile
+  window.addEventListener('touchmove', e => { e.preventDefault(); }, { passive:false });
+
+})();
+</script>
+</body>
+</html>
