@@ -1,10 +1,10 @@
 {
-  "name": "V8 vs EV — Street Laughs",
+  "name": "V8 vs EV \u2014 Street Laughs",
   "short_name": "V8 vs EV",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#10141a",
-  "theme_color": "#10141a",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "icons": [
     {
       "src": "icons/icon-192.png",
