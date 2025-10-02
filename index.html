@@ -16,7 +16,7 @@
     header img{width:40px;height:40px}
     h1{font-size:20px; margin:0}
     .grid{display:grid; grid-template-columns:1fr 300px; gap:0; align-items:stretch}
-    #gamePane{background:#0b0e14; display:flex; align-items:center; justify-content:center; border-top:1px solid #242b39}
+    #gamePane{background:#0b0e14; display:flex; align-items:center; justify-content:center; border-top:1px solid #242b39; position:relative}
     canvas{width:100%; height:100%; image-rendering: pixelated; background:#0a0e14}
     #side{padding:14px; border-left:1px solid #242b39; background:#0e131b}
     #btns button,#installBtn{width:100%; padding:12px 14px; margin:8px 0; border-radius:10px; border:1px solid #2a3242; background:#16202c; color:var(--text); font-weight:600}
@@ -29,7 +29,7 @@
     .toggle:before{content:""; position:absolute; top:3px; left:3px; width:22px;height:22px; background:white; border-radius:50%; transition:.15s}
     .toggle:checked:before{left:23px}
     #footer{font-size:12px; opacity:.7; padding:8px 14px; border-top:1px solid #242b39}
-    #menuOverlay{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(5,7,10,.78); z-index:3}
+    #menuOverlay{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(5,7,10,.84); z-index:3}
     #menuCard{background:#0f141c; border:1px solid #2a3242; border-radius:12px; padding:18px; width:min(520px,95%)}
     #menuCard h2{margin:0 0 8px 0}
     #menuCard p{margin:6px 0}
@@ -47,16 +47,16 @@
           <div style="opacity:.8">’75 Trans Am vs E-Kisten — ps1/ps2 low poly vibe</div>
         </div>
       </header>
-      <div class="grid" style="position:relative; min-height:70vh;">
+      <div class="grid" style="min-height:70vh;">
         <div id="gamePane">
           <canvas id="game" width="480" height="800"></canvas>
-          <div id="menuOverlay" hidden>
+          <div id="menuOverlay" aria-hidden="false">
             <div id="menuCard">
               <h2>🏁 Menü</h2>
-              <p>Weiche den E‑Autos aus, sammle Benzinkanister und halte den V8 am Leben.</p>
+              <p>Weiche den E-Autos aus, sammle Benzinkanister und halte den V8 am Leben.</p>
               <p><strong>Steuerung</strong></p>
               <p>↔️ <span class="kbd">←</span>/<span class="kbd">→</span> oder Wisch nach links/rechts: Spur wechseln</p>
-              <p>⏫ <span class="kbd">↑</span> / Tippen doppelt: Nitro‑Boost</p>
+              <p>⏫ <span class="kbd">↑</span> / Tippen doppelt: Nitro-Boost</p>
               <p><small>Vibration auf Geräten mit Haptik. Ton kann im Panel rechts aus/an geschaltet werden.</small></p>
               <div class="row" style="margin-top:10px">
                 <button id="startBtn" class="primary">Start!</button>
@@ -75,16 +75,21 @@
           </div>
           <hr style="border-color:#242b39; opacity:.4">
           <p><strong>Highscore:</strong> <span id="hi">0</span></p>
-          <p id="tips" style="opacity:.8">Tipp: E‑Autos haben Drehmoment – aber keinen Sound. 😏</p>
+          <p id="tips" style="opacity:.8">Tipp: E-Autos haben Drehmoment – aber keinen Sound. 😏</p>
         </aside>
       </div>
       <div id="footer">Made for GitHub Pages • PWA offline ready • Nur zu Spaßzwecken ✌️</div>
     </div>
   </div>
   <script>
+  // helpers to show/hide overlay reliably on all browsers
+  const overlay = document.getElementById('menuOverlay');
+  const showMenu = () => { overlay.hidden=false; overlay.style.display='flex'; overlay.setAttribute('aria-hidden','false'); };
+  const hideMenu = () => { overlay.hidden=true; overlay.style.display='none'; overlay.setAttribute('aria-hidden','true'); };
+
   // --- PWA install prompt ---
   let deferredPrompt;
-  window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; const b=document.getElementById('installBtn'); b.hidden=false; b.onclick=async()=>{ b.disabled=true; if(deferredPrompt){ deferredPrompt.prompt(); await deferredPrompt.userChoice; } b.textContent="Installations-Dialog geöffnet"; };});
+  window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; const b=document.getElementById('installBtn'); b.hidden=false; b.onclick=async(ev)=>{ ev.preventDefault(); if(deferredPrompt){ deferredPrompt.prompt(); await deferredPrompt.userChoice; } b.textContent="Installations-Dialog geöffnet"; };});
   if ('serviceWorker' in navigator) { window.addEventListener('load', ()=> navigator.serviceWorker.register('./sw.js')); }
 
   // --- tiny pseudo-3D runner ---
@@ -108,12 +113,12 @@
 
   let musicNode=null;
   function startMusic(){
+    if(!document.getElementById('musT').checked) return;
     if (musicNode) return;
     const o=AC.createOscillator(); const g=AC.createGain(); o.type='square'; o.connect(g); g.connect(gainMusic);
     const now=AC.currentTime;
     g.gain.setValueAtTime(0.08, now);
-    // simple two-note riff loop
-    function loop(t0){
+    function loop(){
       const t=AC.currentTime;
       const beat=0.26; const p=[110, 146.8, 110, 196][Math.floor((t/beat))%4];
       o.frequency.setTargetAtTime(p, t, 0.02);
@@ -125,7 +130,8 @@
   function stopMusic(){
     if (!musicNode) return;
     cancelAnimationFrame(musicNode._id);
-    musicNode.o.stop(); musicNode=null;
+    try{ musicNode.o.stop(); }catch(e){}
+    musicNode=null;
   }
   function sfx(type){
     if(!document.getElementById('sfxT').checked) return;
@@ -142,16 +148,14 @@
   document.getElementById('musT').addEventListener('change', e=>{
     if(e.target.checked){ startMusic(); } else { stopMusic(); }
   });
-  document.getElementById('sfxT').addEventListener('change', e=>{ /*no-op*/ });
-  document.getElementById('vibT').addEventListener('change', e=>{ /*no-op*/ });
-  document.getElementById('pauseBtn').onclick = ()=>{ state='menu'; document.getElementById('menuOverlay').hidden=false; };
-  document.getElementById('startBtn').onclick = startGame;
-  document.getElementById('closeMenu').onclick = ()=>{ document.getElementById('menuOverlay').hidden=true; if(state==='menu') state='playing'; };
+  document.getElementById('pauseBtn').onclick = ()=>{ state='menu'; showMenu(); };
+  document.getElementById('startBtn').onclick = ()=>{ startGame(); };
+  document.getElementById('closeMenu').onclick = (ev)=>{ ev.preventDefault(); if(state==='menu'){ state='playing'; } hideMenu(); };
 
   function startGame(){
     objs.length=0; score=0; player.lane=1; player.alive=true; player.nitro=0;
-    state='playing'; document.getElementById('menuOverlay').hidden=true;
-    if (document.getElementById('musT').checked) startMusic(); AC.resume();
+    state='playing'; hideMenu();
+    startMusic(); AC.resume();
   }
 
   // controls: keyboard + swipe/tap
@@ -166,13 +170,11 @@
   canvas.addEventListener('touchend', (e)=>{
     const t=e.changedTouches[0]; if(!tStart) return;
     const dx=t.clientX - tStart.clientX; const dy=t.clientY - tStart.clientY;
-    if(Math.abs(dx)>40 && Math.abs(dx)>Math.abs(dy)){ // swipe horizontal
+    if(Math.abs(dx)>40 && Math.abs(dx)>Math.abs(dy)){
       if(dx<0) { player.lane=Math.max(0,player.lane-1); }
       else { player.lane=Math.min(2,player.lane+1); }
       vibrate([10,30,10]);
-    } else if (Math.abs(dy)<20) { // tap
-      boost();
-    }
+    } else if (Math.abs(dy)<20) { boost(); }
     tStart=null;
   });
 
@@ -196,15 +198,13 @@
   function update(){
     const speedMul = 1 + (player.nitro>0 ? 1.1:0);
     objs.forEach(o=> o.y += (o.speed*speedMul));
-    objs.filter(o=>o.y<H+120);
     for(let i=objs.length-1;i>=0;i--){
       const o=objs[i];
       if(o.y>H+100){ objs.splice(i,1); continue; }
       // collision check
       if(o.type==='ev' && Math.abs(o.y-player.y)<70 && o.lane===player.lane){
-        // crash
         sfx('hit'); vibrate([30,40,30]);
-        state='menu'; document.getElementById('menuOverlay').hidden=false;
+        state='menu'; showMenu();
         player.alive=false;
         hiscore = Math.max(hiscore, Math.floor(score));
         localStorage.setItem('v8ev_hi', hiscore);
@@ -220,25 +220,19 @@
   }
 
   function drawRoad(){
-    // fake perspective road
     ctx.fillStyle = '#091018'; ctx.fillRect(0,0,W,H);
     const horizon = H*0.25;
-    // sky
     const skyGrad = ctx.createLinearGradient(0,0,0,horizon);
     skyGrad.addColorStop(0,'#ee8d3a'); skyGrad.addColorStop(1,'#1a2030');
     ctx.fillStyle=skyGrad; ctx.fillRect(0,0,W,horizon);
-    // mountains
     ctx.fillStyle='#2c1c1a';
     for(let i=0;i<7;i++){ ctx.beginPath(); ctx.moveTo(i*120-60,horizon+20); ctx.lineTo(i*120+40,horizon-20); ctx.lineTo(i*120+140,horizon+20); ctx.fill(); }
-    // road
     ctx.fillStyle='#151a22'; ctx.beginPath();
     ctx.moveTo(0,H); ctx.lineTo(W*0.08,horizon+40); ctx.lineTo(W*0.92,horizon+40); ctx.lineTo(W,H); ctx.closePath(); ctx.fill();
-    // edges
     ctx.strokeStyle='#b21f2d'; ctx.lineWidth=6; ctx.beginPath();
     ctx.moveTo(W*0.09,horizon+40); ctx.lineTo(0,H);
     ctx.moveTo(W*0.91,horizon+40); ctx.lineTo(W,H);
     ctx.stroke();
-    // lane lines
     ctx.strokeStyle='#f0e68c'; ctx.lineWidth=4;
     for(let i=1;i<3;i++){
       const x0=W*(0.1 + 0.8*(i/3));
@@ -248,20 +242,47 @@
     ctx.setLineDash([]);
   }
 
-  function drawCar(x,y,color,label){
-    // PS1-style flat shaded boxy car
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.fillStyle=color; ctx.strokeStyle='#000'; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.rect(-38,-60,76,120); ctx.fill(); ctx.stroke(); // body
-    ctx.fillStyle='#0b0f14'; ctx.fillRect(-34,-50,68,30); // windshield
-    ctx.fillRect(-34,20,68,30); // rear
-    ctx.fillStyle='#222'; ctx.fillRect(-40,-30,8,20); ctx.fillRect(32,-30,8,20); // wheels front
-    ctx.fillRect(-40,30,8,20); ctx.fillRect(32,30,8,20); // wheels rear
-    if(label){
-      ctx.fillStyle='#fff'; ctx.font='bold 12px monospace'; ctx.textAlign='center';
-      ctx.fillText(label, 0, 0);
-    }
+  // --------- nicer Trans Am '75 (top-down, low poly) ---------
+  function drawTransAm(x,y){
+    ctx.save(); ctx.translate(x,y); ctx.lineJoin='miter'; ctx.lineCap='butt';
+    // body base: black
+    ctx.fillStyle='#0b0b0d'; ctx.strokeStyle='#000'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(-42,-64); ctx.lineTo(42,-64); ctx.lineTo(46,-30); ctx.lineTo(40,58); ctx.lineTo(-40,58); ctx.lineTo(-46,-30); ctx.closePath(); ctx.fill(); ctx.stroke();
+    // gold pinstripes
+    ctx.strokeStyle='#c9a43a'; ctx.lineWidth=2;
+    ctx.strokeRect(-40,-58,80,112);
+    // hood shaker + firebird decal
+    ctx.fillStyle='#111318'; ctx.fillRect(-30,-48,60,34); // hood
+    ctx.fillStyle='#202428'; ctx.fillRect(-14,-52,28,14); // shaker
+    // stylized firebird
+    ctx.fillStyle='#c9a43a';
+    ctx.beginPath(); ctx.moveTo(0,-40); ctx.lineTo(10,-32); ctx.lineTo(0,-24); ctx.lineTo(-10,-32); ctx.closePath(); ctx.fill();
+    // roof / glass
+    ctx.fillStyle='#1a222b'; ctx.fillRect(-30,-10,60,38); // roof glass
+    ctx.fillStyle='#0e141b'; ctx.fillRect(-30,22,60,26); // rear glass
+    // rear spoiler
+    ctx.fillStyle='#111'; ctx.fillRect(-40,56,80,6);
+    // wheels
+    ctx.fillStyle='#222'; ctx.fillRect(-44,-30,10,22); ctx.fillRect(34,-30,10,22);
+    ctx.fillRect(-44,22,10,22); ctx.fillRect(34,22,10,22);
+    // license / label
+    ctx.fillStyle='#ffcc00'; ctx.fillRect(-18,40,36,14);
+    ctx.fillStyle='#111'; ctx.font='bold 10px monospace'; ctx.textAlign='center'; ctx.fillText("75 TA",0,51);
+    // subtle highlight
+    const g=ctx.createLinearGradient(-42,-64,42,58); g.addColorStop(0,'rgba(255,255,255,0.05)'); g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=g; ctx.fillRect(-42,-64,84,122);
+    ctx.restore();
+  }
+
+  function drawEV(x,y,label){
+    ctx.save(); ctx.translate(x,y);
+    ctx.fillStyle='#5fb3ff'; ctx.strokeStyle='#000'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.rect(-38,-60,76,120); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#0b0f14'; ctx.fillRect(-34,-50,68,30);
+    ctx.fillRect(-34,20,68,30);
+    ctx.fillStyle='#222'; ctx.fillRect(-40,-30,8,20); ctx.fillRect(32,-30,8,20);
+    ctx.fillRect(-40,30,8,20); ctx.fillRect(32,30,8,20);
+    ctx.fillStyle='#fff'; ctx.font='bold 12px monospace'; ctx.textAlign='center'; ctx.fillText(label, 0, 0);
     ctx.restore();
   }
 
@@ -275,10 +296,9 @@
   const evNames = ['e-Box','Wattson','Silent-Bee','Sparky','Model Zzz','EcoBrick'];
   function render(){
     drawRoad();
-    // objects
     objs.forEach(o=>{
       const x = lanes[o.lane];
-      if(o.type==='ev') drawCar(x, o.y, '#5fb3ff', evNames[o._n??(o._n=Math.floor(Math.random()*evNames.length))]);
+      if(o.type==='ev') drawEV(x, o.y, evNames[o._n??(o._n=Math.floor(Math.random()*evNames.length))]);
       else { // can (fuel)
         ctx.save(); ctx.translate(x,o.y);
         ctx.fillStyle='#ffcc00'; ctx.strokeStyle='#000'; ctx.lineWidth=2;
@@ -287,8 +307,7 @@
         ctx.restore();
       }
     });
-    // player car
-    drawCar(lanes[player.lane], player.y, '#2bdc64', 'V8 \'75');
+    drawTransAm(lanes[player.lane], player.y);
     drawHUD();
   }
 
@@ -301,7 +320,7 @@
   requestAnimationFrame(loop);
 
   // start with menu visible
-  document.getElementById('menuOverlay').hidden=false;
+  showMenu();
   </script>
 </body>
 </html>
