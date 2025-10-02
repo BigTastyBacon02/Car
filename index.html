@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0b0f14"/>
 <style>
-  :root{--ui:#121620;--panel:#0c1018;--txt:#eaf1ff;--accent:#ffd24a}
+  :root{--ui:#121620;--txt:#eaf1ff;--accent:#ffd24a}
   html,body{height:100%;margin:0;background:#0b0f14;color:var(--txt);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;overflow:hidden}
   #wrap{position:relative;width:100%;height:100%}
   #game{display:block;width:100%;height:100%}
@@ -15,23 +15,18 @@
   #menuOverlay{position:absolute;inset:0;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;z-index:10}
   #menu{background:#0f141c;border:1px solid #2a3242;border-radius:12px;padding:18px;width:min(520px,92%)}
   #menu h2{margin:.2em 0 .4em}
-  #menu .row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin:.5em 0}
+  .row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin:.5em 0}
   .toggle{appearance:none;width:48px;height:28px;border-radius:28px;background:#2a3242;position:relative;outline:none;cursor:pointer}
   .toggle:checked{background:#1c7d42}
   .toggle:before{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;background:#fff;border-radius:50%;transition:.15s}
   .toggle:checked:before{left:23px}
   button{padding:10px 14px;border-radius:10px;border:1px solid #3b455a;background:#1a2130;color:var(--txt);font-weight:600}
   button:hover{filter:brightness(1.06);cursor:pointer}
-  /* steering wheel */
-  #wheelWrap{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);width:180px;height:180px;touch-action:none}
-  #wheel{width:100%;height:100%;border-radius:50%;background:radial-gradient(ellipse at center, #1c2331 0%, #111723 70%);border:6px solid #2a3242;position:relative;box-shadow:0 10px 30px #000a}
-  #wheel:before,#wheel:after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#0d1320}
-  #wheel:before{width:70%;height:18%;border-radius:12px}
-  #wheel:after{width:18%;height:70%;border-radius:12px}
-  #wheelKnob{position:absolute;left:50%;top:8px;transform:translateX(-50%);width:18px;height:18px;background:#ffd24a;border-radius:50%}
-  @media (min-width:900px){
-    #wheelWrap{width:220px;height:220px}
-  }
+  /* pixel buttons */
+  .arrow{position:absolute;bottom:12px;width:22vw;max-width:170px;opacity:.55;transition:.08s;user-select:none}
+  #leftBtn{left:12px}
+  #rightBtn{right:12px}
+  .arrow:active{opacity:.9;transform:scale(1.02)}
 </style>
 </head>
 <body>
@@ -46,12 +41,11 @@
       <div class="row"><span>🔊 SFX</span><input id="sfxT" type="checkbox" class="toggle" checked></div>
       <div class="row"><span>📳 Vibration</span><input id="vibT" type="checkbox" class="toggle" checked></div>
       <div class="row" style="justify-content:center;gap:12px"><button id="startBtn">Start!</button><button id="closeBtn">Schließen</button></div>
-      <small>Steuerung: Pfeile links/rechts oder das Lenkrad unten. Tippe Doppelt für Nitro.</small>
+      <small>Steuerung: Pfeile unten oder **Wischen**. Doppeltippen = Nitro.</small>
     </div>
   </div>
-  <div id="wheelWrap">
-    <div id="wheel"><div id="wheelKnob"></div></div>
-  </div>
+  <img id="leftBtn" class="arrow" src="assets/arrow-left.png" alt="left">
+  <img id="rightBtn" class="arrow" src="assets/arrow-right.png" alt="right">
 </div>
 <script>
 const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
@@ -66,36 +60,51 @@ const imgBG=new Image(); imgBG.src='assets/bg.png';
 
 const player={lane:1, y:H*0.7, w:84, h:126, nitro:0};
 const objs=[];
-let lastSpawnY=-999;
 
-// ----- audio (WebAudio) -----
+// ----- audio: nicer chiptune loop + sfx -----
 const AC = new (window.AudioContext||window.webkitAudioContext)();
-const gMaster=AC.createGain(); gMaster.connect(AC.destination);
-const gMusic=AC.createGain(); gMusic.connect(gMaster); gMusic.gain.value=0.6;
+const gMaster=AC.createGain(); gMaster.connect(AC.destination); gMaster.gain.value=0.7;
+const gMusic=AC.createGain(); gMusic.connect(gMaster); gMusic.gain.value=0.4;
 const gSfx=AC.createGain(); gSfx.connect(gMaster); gSfx.gain.value=0.9;
-let musicLoop=null;
+let musicTimer=null, bass=null, lead=null, hatInt=null;
 function startMusic(){
   if(!document.getElementById('musT').checked) return;
-  if(musicLoop) return;
-  const o=AC.createOscillator(); const g=AC.createGain(); o.type='square'; o.connect(g); g.connect(gMusic);
-  g.gain.value=0.08; o.start();
-  function loop(){
-    const t=AC.currentTime; const beat=0.23;
-    const notes=[110, 139.7, 110, 196, 110, 174, 110, 98];
-    o.frequency.setTargetAtTime(notes[Math.floor(t/beat)%notes.length], t, 0.03);
-    musicLoop=requestAnimationFrame(loop);
-  }
-  loop(); musicLoop={o};
+  stopMusic();
+  const now=AC.currentTime;
+  // bass
+  bass=AC.createOscillator(); const gb=AC.createGain(); bass.type='square'; bass.connect(gb); gb.connect(gMusic); gb.gain.value=0.08; bass.start();
+  // lead
+  lead=AC.createOscillator(); const gl=AC.createGain(); lead.type='triangle'; lead.connect(gl); gl.connect(gMusic); gl.gain.value=0.06; lead.start();
+  // hihat via noise
+  const noise=AC.createBufferSource(); const buffer=AC.createBuffer(1, AC.sampleRate*1, AC.sampleRate);
+  const data=buffer.getChannelData(0); for(let i=0;i<data.length;i++){ data[i]=Math.random()*2-1; }
+  const hn=AC.createGain(); hn.gain.value=0; noise.connect(hn); hn.connect(gMusic); noise.loop=true; noise.start();
+  hatInt=setInterval(()=>{ hn.gain.cancelScheduledValues(AC.currentTime); hn.gain.setValueAtTime(0.25, AC.currentTime); hn.gain.exponentialRampToValueAtTime(0.001, AC.currentTime+0.04); }, 120);
+  noise.buffer=buffer;
+
+  const bassNotes=[55,55,55,41.2,55,55,55,49];
+  const leadNotes=[220,0,196,0,174,0,196,0];
+  musicTimer=setInterval(()=>{
+    const t=AC.currentTime;
+    bass.frequency.setTargetAtTime(bassNotes[(Math.floor(t*4))%bassNotes.length], t, 0.03);
+    const ln = leadNotes[(Math.floor(t*4))%leadNotes.length];
+    if(ln>0) lead.frequency.setTargetAtTime(ln, t, 0.02);
+  }, 120);
 }
-function stopMusic(){ if(musicLoop){ cancelAnimationFrame(musicLoop); try{musicLoop.o.stop()}catch(e){} musicLoop=null; } }
+function stopMusic(){
+  if(musicTimer){ clearInterval(musicTimer); musicTimer=null; }
+  if(hatInt){ clearInterval(hatInt); hatInt=null; }
+  try{ bass&&bass.stop(); }catch(e){} try{ lead&&lead.stop(); }catch(e){}
+  bass=null; lead=null;
+}
 function sfx(type){
   if(!document.getElementById('sfxT').checked) return;
   const o=AC.createOscillator(); const g=AC.createGain(); o.connect(g); g.connect(gSfx);
   const now=AC.currentTime;
-  if(type==='hit'){ o.type='sawtooth'; o.frequency.setValueAtTime(70, now); g.gain.setValueAtTime(0.25, now); g.gain.exponentialRampToValueAtTime(0.001, now+0.25); }
-  if(type==='coin'){ o.type='triangle'; o.frequency.setValueAtTime(900, now); o.frequency.exponentialRampToValueAtTime(1400, now+0.08); g.gain.setValueAtTime(0.09, now); g.gain.exponentialRampToValueAtTime(0.001, now+0.2); }
-  if(type==='nitro'){ o.type='square'; o.frequency.setValueAtTime(100, now); o.frequency.exponentialRampToValueAtTime(40, now+0.45); g.gain.setValueAtTime(0.2, now); g.gain.exponentialRampToValueAtTime(0.001, now+0.45); }
-  o.start(now); o.stop(now+0.6);
+  if(type==='hit'){ o.type='sawtooth'; o.frequency.setValueAtTime(80, now); g.gain.setValueAtTime(0.3, now); g.gain.exponentialRampToValueAtTime(0.001, now+0.25); }
+  if(type==='coin'){ o.type='square'; o.frequency.setValueAtTime(900, now); o.frequency.exponentialRampToValueAtTime(1500, now+0.1); g.gain.setValueAtTime(0.12, now); g.gain.exponentialRampToValueAtTime(0.001, now+0.25); }
+  if(type==='nitro'){ o.type='triangle'; o.frequency.setValueAtTime(160, now); o.frequency.exponentialRampToValueAtTime(60, now+0.45); g.gain.setValueAtTime(0.22, now); g.gain.exponentialRampToValueAtTime(0.001, now+0.45); }
+  o.start(now); o.stop(now+0.5);
 }
 function vibrate(p){ if(!document.getElementById('vibT').checked) return; if('vibrate' in navigator) navigator.vibrate(p); }
 
@@ -106,26 +115,22 @@ function hideMenu(){ overlay.style.display='none'; }
 document.getElementById('startBtn').onclick=()=>{ startGame(); };
 document.getElementById('closeBtn').onclick=()=>{ hideMenu(); state='playing'; AC.resume(); startMusic(); };
 function startGame(){
-  objs.length=0; score=0; player.lane=1; player.nitro=0; lastSpawnY=-999;
+  objs.length=0; score=0; player.lane=1; player.nitro=0;
   hideMenu(); state='playing'; AC.resume(); startMusic();
 }
 
-// ----- spawn logic (avoids unfair blocking) -----
+// spawn with fairness
 function spawn(){
-  const spacing=180; // minimal vertical spacing between cars
-  const lastY = objs.length? objs[objs.length-1].y : -999;
-  if(objs.length===0 || (lastY>spacing && Math.random()<0.035)){
+  if(objs.length<1 || (objs[objs.length-1].y>200 && Math.random()<0.04)){
     let lane = Math.floor(Math.random()*3);
-    // If too close to player at top, avoid same lane instant kill
-    if(Math.abs(-120 - player.y) < 220 && lane===player.lane) lane = (lane+1)%3;
-    objs.push({type:'ev', lane, y:-140, w:84, h:126, speed:5+Math.random()*1.8});
+    if(lane===player.lane && Math.random()<0.6) lane=(lane+1)%3; // leichte Varianz
+    objs.push({lane, y:-150, w:84, h:126, speed:5+Math.random()*1.6});
   }
 }
 
-// ----- update & draw -----
 function update(){
-  const speedMul = 1 + (player.nitro>0?0.7:0);
-  for(const o of objs) o.y += o.speed*speedMul;
+  const mul = 1+(player.nitro>0?0.6:0);
+  for(const o of objs) o.y += o.speed*mul;
   for(let i=objs.length-1;i>=0;i--){
     const o=objs[i];
     if(o.y>H+160) objs.splice(i,1);
@@ -135,7 +140,7 @@ function update(){
       stopMusic(); return;
     }
   }
-  score += 0.6*(1+(player.nitro>0?0.5:0));
+  score += 0.7*(1+(player.nitro>0?0.5:0));
   document.getElementById('score').textContent = Math.floor(score);
   if(player.nitro>0) player.nitro--;
 }
@@ -150,34 +155,44 @@ function draw(){
 function loop(){ if(state==='playing'){ spawn(); update(); } draw(); requestAnimationFrame(loop); }
 loop();
 
-// ----- controls: keyboard, touch, and steering wheel -----
+// controls: keyboard
 window.addEventListener('keydown', e=>{
   if(state!=='playing') return;
   if(e.key==='ArrowLeft' || e.key==='a'){ player.lane=Math.max(0,player.lane-1); vibrate([10]); }
   if(e.key==='ArrowRight' || e.key==='d'){ player.lane=Math.min(2,player.lane+1); vibrate([10]); }
-  if(e.key==='ArrowUp' || e.key==='w'){ if(player.nitro<=0){ player.nitro=120; sfx('nitro'); vibrate([15,30,15]); } }
+  if(e.key==='ArrowUp' || e.key==='w'){ if(player.nitro<=0){ player.nitro=120; sfx('nitro'); } }
 });
 
-// On-screen wheel
-const wheel=document.getElementById('wheel');
-let startX=null;
-function wheelMove(clientX){
-  const rect=wheel.getBoundingClientRect();
-  const x = clientX - (rect.left + rect.width/2);
-  const dir = x< -10 ? -1 : x> 10 ? 1 : 0;
-  if(dir<0) { player.lane=Math.max(0,player.lane-1); vibrate([10]); }
-  if(dir>0) { player.lane=Math.min(2,player.lane+1); vibrate([10]); }
-  // rotate visual
-  wheel.style.transform = `rotate(${Math.max(-30,Math.min(30,x*0.15))}deg)`;
-  clearTimeout(wheel._t); wheel._t=setTimeout(()=> wheel.style.transform='rotate(0deg)', 120);
-}
-wheel.addEventListener('pointerdown', e=>{ startX=e.clientX; wheel.setPointerCapture(e.pointerId); });
-wheel.addEventListener('pointermove', e=>{ if(startX!==null) wheelMove(e.clientX); });
-wheel.addEventListener('pointerup', e=>{ startX=null; wheel.releasePointerCapture(e.pointerId); wheel.style.transform='rotate(0deg)'; });
-wheel.addEventListener('dblclick', ()=>{ if(player.nitro<=0){ player.nitro=120; sfx('nitro'); } });
+// swipe gestures
+let touchStart=null;
+canvas.addEventListener('touchstart', e=>{ touchStart=e.changedTouches[0]; });
+canvas.addEventListener('touchend', e=>{
+  const t=e.changedTouches[0]; if(!touchStart) return;
+  const dx=t.clientX - touchStart.clientX; const dy=t.clientY - touchStart.clientY;
+  if(Math.abs(dx)>40 && Math.abs(dx)>Math.abs(dy)){
+    if(dx<0) { player.lane=Math.max(0,player.lane-1); } else { player.lane=Math.min(2,player.lane+1); }
+    vibrate([10,20,10]);
+  } else if(Math.abs(dy)<20){ if(player.nitro<=0){ player.nitro=120; sfx('nitro'); } }
+  touchStart=null;
+});
 
-// Canvas tap to boost
-canvas.addEventListener('dblclick', ()=>{ if(player.nitro<=0){ player.nitro=120; sfx('nitro'); } });
+// on-screen pixel arrows
+function bindArrow(id, dir){
+  const el=document.getElementById(id);
+  let hold=null;
+  const step=()=>{
+    if(state!=='playing') return;
+    if(dir==='left') player.lane=Math.max(0,player.lane-1);
+    else player.lane=Math.min(2,player.lane+1);
+    vibrate([8]);
+    hold=setTimeout(step, 130);
+  };
+  el.addEventListener('touchstart', (e)=>{ e.preventDefault(); step(); });
+  el.addEventListener('touchend', ()=>{ clearTimeout(hold); hold=null; });
+  el.addEventListener('mousedown', (e)=>{ e.preventDefault(); step(); });
+  window.addEventListener('mouseup', ()=>{ clearTimeout(hold); hold=null; });
+}
+bindArrow('leftBtn','left'); bindArrow('rightBtn','right');
 
 // PWA SW
 if('serviceWorker' in navigator){ window.addEventListener('load', ()=> navigator.serviceWorker.register('./sw.js')); }
